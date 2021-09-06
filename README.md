@@ -12,8 +12,8 @@ already mentioned, we will use exploratory analysis to get a better overview of 
 that will allow us to predict the energy production of diyerent solar stations.
 
 ## The Data Set 
-The data used in this report is a set of observations obtained from the American Meteorological Society 20132014 which can
-be found here ¡https www.kaggle.com§c§ams2014solarenergypredictioncontest§data¢.
+The data used in this report is a set of observations obtained from the American Meteorological Society 2013 & 2014 which can
+be found here https://www.kaggle.com/c/ams-2014-solar-energy-prediction-contest
 In total we have three diyerent data sets:
 VROaU_daWaVeW.RDaWa : Information from the stations and additional features which had undergone a principal
 component analysis. Each observation corresponds to a day.
