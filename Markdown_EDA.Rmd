@@ -1,0 +1,408 @@
+---
+title: "Solar Energy Analysis"
+author: "Group 3, Section 2, MBD"
+date: "25 December 2020"
+output:
+  html_document:
+    theme: cosmo
+    toc: yes
+    toc_float: yes
+    toc_depth: 4
+runtime: shiny
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = FALSE, message=F, warning=F)
+```
+
+```{r, echo=FALSE}
+#preperation steps
+#define the paths & the data
+  station_info_path <- "/Users/cdalenbrook/Documents/MBD/R Programming/Group Project/project(1)/station_info.csv";
+solar_data_path <- "/Users/cdalenbrook/Documents/MBD/R Programming/Group Project/project(1)/solar_dataset.RData";
+additional_data_path <- "/Users/cdalenbrook/Documents/MBD/R Programming/Group Project/project(1)/additional_variables.RData";
+
+  solar_data <- readRDS(solar_data_path);
+  additional_data <- readRDS(additional_data_path);
+  data <- cbind(solar_data, additional_data)
+  data_EDA <- data[,-c(0:99)]
+  data_EDA$Date <- NULL
+  
+#load the libraries 
+  library(dplyr)
+  library(DataExplorer)
+  library(kableExtra)
+  library(psych)
+  library(leaflet)
+  library(ggplot2)
+  library(tidyr)
+  library(Amelia)
+  library(shiny)
+```
+
+### Objective
+The objective of this project is to predict the incoming solar energy of 98 Oklahoma Mesonet sites. Before running the actual model, this report aims to give a general overview of the data and which variables might be of interest or should not be taken into consideration.
+
+### Renewable energy market
+With an increasing trend to use less fossil resources and reduce emissions, the renewable energy industry is naturally gaining in importance and shows strong efficiency gains in recent years. Despite all this, energy production is essential for regions and this is mostly fluctuating in renewable energies, as they are highly dependent on weather conditions. For this reason, good forecasting models are becoming more and more important and this will also be our final outcome of this analysis. As already mentioned, we will use exploratory analysis to get a better overview of the data and following that build a model that will allow us to predict the energy production of different solar stations. 
+
+### Data set
+The data used in this report is a set of observations obtained from the American Meteorological Society 2013-2014 which can be found [here](https://www.kaggle.com/c/ams-2014-solar-energy-prediction-contest/data). 
+
+In total we have three different data sets:
+
+* `solar_dataset.RData`: Information from the stations and additional features which had undergone a principal component analysis. Each observation corresponds to a day. 
+
+* `station_info.csv`: Information on each of the stations like latitude, longitudes, and elevation (meters)
+
+* `additional_variables.RData`: Information on numerical weather predictions (NWP) which might be relevant for the solar energy production.
+
+As mentioned, the solar data set was pre-processed by means of principal component analysis. This analysis is a dimensionality-reduction method which is often used when handling big data sets as the ones here. Since we do not have any information on the exact pre-processing steps we will not explain this further. 
+
+
+### Exploratory Data Analysis
+First, we would like to have an understanding of what our data actually looks like. The data set we will look at in the following steps is the merge of the solar data set and the additional variables.
+Below is a short summary of the dimensions of the overall data set:
+
+#### General data overview
+
+```{r, echo=FALSE}
+    intro <- introduce(data)
+    
+    intro <- intro %>%
+      kbl("html") %>%
+      kable_styling(font_size = 11)
+    
+    scroll_box(
+      intro,
+      height = "80px",
+      width = "835px",
+      box_css = "border: 1px solid #ddd; padding: 5px; ",
+      extra_css = NULL,
+      fixed_thead = TRUE
+    )
+    
+```
+
+<br/>
+<br/>
+Next we decided to explore the descriptive statistics of each of our columns, in order to find out more about what the data looks like. 
+<br/>
+<br/>
+
+#### Descriptive statistics independent Variables
+```{r}
+descriptive_statistics_dependents <- describe(data[,c(2:99)])
+
+descriptive_statistics_dependents <- cbind(variable_names = rownames(descriptive_statistics_dependents),
+                                            descriptive_statistics_dependents)
+
+rownames(descriptive_statistics_dependents) <- NULL
+
+  kable_input_dependents <- kable(descriptive_statistics_dependents) %>%
+    kable_styling(font_size = 11)
+  
+  scroll_box(
+    kable_input_dependents,
+    height = "400px",
+    width = "835px",
+    box_css = "border: 1px solid #ddd; padding: 5px; ",
+    extra_css = NULL,
+    fixed_thead = TRUE
+  )
+```
+
+
+#### Descriptive statistics dependent Variables
+```{r}
+
+  
+  descriptive_statistics <- describe(data_EDA)
+
+
+  descriptive_statistics <- cbind(variable_names = rownames(descriptive_statistics), descriptive_statistics)
+  
+  
+  rownames(descriptive_statistics) <- NULL
+  rownames(descriptive_statistics_dependents) <- NULL
+
+  kable_input <- kable(descriptive_statistics) %>%
+    kable_styling(font_size = 11)
+  
+  scroll_box(
+    kable_input,
+    height = "400px",
+    width = "835px",
+    box_css = "border: 1px solid #ddd; padding: 5px; ",
+    extra_css = NULL,
+    fixed_thead = TRUE
+  )
+  
+```
+
+#### Solar data set overview
+As the solar data set is the main component of our analysis we are going to give a short but more detailed overview what the main components of the data set are:
+
+* column `Date` in `solar_data[,1]`: The level of our observations. For each day we have an observation per weather station 
+
+* column `ACME`, `ADAX`, `ALTU` ... in `solar_data[,2:99]`: the different weather stations
+
+* column `PC1`, `PC2`, `PC3` ... in `solar_data[,100:456]`: the different features later used for our predictions
+
+The period covered by the data set ranges from January 1st 1994 to 30th November of 2012 while we are missing the data of the weather stations in between January 1st 2008 to 30th November of 2012. These values will be later predicted by our model. 
+
+Since it is hard to plot each of the features in a big data set like this we developed a small Shiny app to get a better understanding of the data:
+
+```{r, echo=FALSE}
+dataset <- solar_data[1:5113,2:450]
+# Define UI for application that draws a histogram
+ui <- pageWithSidebar(
+
+    # Application title
+    titlePanel("Solar Data Explorer"),
+
+    
+    sidebarPanel(
+        selectInput('x', 'X', names(dataset), names(dataset)[[1]]),
+        selectInput('y', 'Y', names(dataset), names(dataset)[[120]]),
+        checkboxInput('smooth', 'Smooth')
+    ),
+    mainPanel(
+        plotOutput('plot')
+    )
+)
+
+# Define server logic required to draw a histogram
+server <- function(input, output) {
+    dataset <- reactive({
+        dataset <- solar_data[1:5113,2:456]
+    })
+    cordf <- reactive({
+        dataset<-dataset();
+        cor(as.numeric(dataset[,input$x]), as.numeric(dataset[,input$y]), method="spearman", use="pairwise.complete.obs")
+    })
+    
+    output$plot <- renderPlot({
+        dataset<-dataset();
+        p <- ggplot(dataset, aes_string(x=paste0("`",input$x,"`"),
+                                        y=paste0("`",input$y,"`")
+        )) +
+            geom_point() + 
+            geom_line() 
+        
+         if (input$smooth)
+            p <- p + geom_smooth(aes(group=1), col="red")
+         
+        print(p)
+        
+    }, height=500)
+}
+
+shinyApp(ui = ui, server = server)
+
+```
+
+#### Location of the stations
+
+In conserdation of our goal to predict the solar energy production of 98 different solar panel sites, we thought it might be interesting to have a closer look where they are actually located:
+
+
+```{r}
+stations <- read.csv(station_info_path, header = TRUE, sep = ",")
+
+map <- leaflet(stations) %>% addTiles() %>% 
+  setView(-98.574020, 35.408600, zoom = 5.5) %>% 
+  addCircles(~elon, ~nlat, weight = 3, radius=40, 
+             color="#0000FF", stroke = TRUE, fillOpacity = 0.8)
+map
+```
+
+#### Distribution Explanation
+
+So far, we have mainly looked closer into the description of our data and the general statistics of it. Another important part, before running a machine learning model is the analysis of the data in terms of distribution. 
+
+As mentioned earlier, our different features from the `solar_data` set went through a principal component analysis. When looking at some of the distributions of the features, it becomes obvious that almost all the data follows a near normal distribution. A normal distribution is something which is very important when analyzing data; it is the most important probability distribution because it describes many natural phenomena. Data with a normal distribution is applicable to a high variety of methods and conclusions of those data sets can be made more easily. 
+
+On the other hand, it becomes obvious that we cannot find a special pattern when looking into the distribution of the independent variables. 
+
+See below the distribution of both, independent and dependent variables:
+
+
+#### Distribution of dependent variables 
+
+```{r}
+data[c(1:5113),c(2:13)] %>%                   
+  gather() %>%                             
+  ggplot(aes(value)) +                     
+  facet_wrap(~ key, scales = "free") +   
+  geom_density(alpha=.2, fill="#FF6666") +
+  geom_histogram(aes(y=..density..), bins = 20, colour="black", fill="white") + 
+  geom_vline(aes(xintercept=mean(value)),
+             color="black", linetype="dashed", size=1) +
+  theme_minimal() 
+
+data[c(1:5113),c(14:25)] %>%                   
+  gather() %>%                             
+  ggplot(aes(value)) +                     
+  facet_wrap(~ key, scales = "free") +   
+  geom_density(alpha=.2, fill="#FF6666") +
+  geom_histogram(aes(y=..density..), bins = 20, colour="black", fill="white") + 
+  geom_vline(aes(xintercept=mean(value)),
+             color="black", linetype="dashed", size=1) +
+  theme_minimal() 
+
+data[c(1:5113),c(26:37)] %>%                   
+  gather() %>%                             
+  ggplot(aes(value)) +                     
+  facet_wrap(~ key, scales = "free") +   
+  geom_density(alpha=.2, fill="#FF6666") +
+  geom_histogram(aes(y=..density..), bins = 20, colour="black", fill="white") + 
+  geom_vline(aes(xintercept=mean(value)),
+             color="black", linetype="dashed", size=1) +
+  theme_minimal() 
+
+data[c(1:5113),c(38:49)] %>%                   
+  gather() %>%                             
+  ggplot(aes(value)) +                     
+  facet_wrap(~ key, scales = "free") +   
+  geom_density(alpha=.2, fill="#FF6666") +
+  geom_histogram(aes(y=..density..), bins = 20, colour="black", fill="white") + 
+  geom_vline(aes(xintercept=mean(value)),
+             color="black", linetype="dashed", size=1) +
+  theme_minimal() 
+
+data[c(1:5113),c(50:61)] %>%                   
+  gather() %>%                             
+  ggplot(aes(value)) +                     
+  facet_wrap(~ key, scales = "free") +   
+  geom_density(alpha=.2, fill="#FF6666") +
+  geom_histogram(aes(y=..density..), bins = 20, colour="black", fill="white") + 
+  geom_vline(aes(xintercept=mean(value)),
+             color="black", linetype="dashed", size=1) +
+  theme_minimal() 
+
+data[c(1:5113),c(62:73)] %>%                   
+  gather() %>%                             
+  ggplot(aes(value)) +                     
+  facet_wrap(~ key, scales = "free") +   
+  geom_density(alpha=.2, fill="#FF6666") +
+  geom_histogram(aes(y=..density..), bins = 20, colour="black", fill="white") + 
+  geom_vline(aes(xintercept=mean(value)),
+             color="black", linetype="dashed", size=1) +
+  theme_minimal() 
+
+data[c(1:5113),c(74:85)] %>%                   
+  gather() %>%                             
+  ggplot(aes(value)) +                     
+  facet_wrap(~ key, scales = "free") +   
+  geom_density(alpha=.2, fill="#FF6666") +
+  geom_histogram(aes(y=..density..), bins = 20, colour="black", fill="white") + 
+  geom_vline(aes(xintercept=mean(value)),
+             color="black", linetype="dashed", size=1) +
+  theme_minimal() 
+
+data[c(1:5113),c(86:99)] %>%                   
+  gather() %>%                             
+  ggplot(aes(value)) +                     
+  facet_wrap(~ key, scales = "free") +   
+  geom_density(alpha=.2, fill="#FF6666") +
+  geom_histogram(aes(y=..density..), bins = 20, colour="black", fill="white") + 
+  geom_vline(aes(xintercept=mean(value)),
+             color="black", linetype="dashed", size=1) +
+  theme_minimal() 
+
+```
+
+#### Distribution of independent variables 
+```{r}
+data[c(1:5113),c(101:121)] %>%                   
+  gather() %>%                             
+  ggplot(aes(value)) +                     
+  facet_wrap(~ key, scales = "free") +   
+  geom_density(alpha=.2, fill="#FF6666") +
+  geom_histogram(aes(y=..density..), bins = 20, colour="black", fill="white") + 
+  geom_vline(aes(xintercept=mean(value)),
+             color="black", linetype="dashed", size=1) +
+  theme_minimal() 
+```
+
+To further analyze the distribution of the pre processed features we could also have a look at the QQ plot which is a graph that can be used to test a variable for the presence of a normal distribution. If the observations lie close to the line, the distribution of the given data has the same shape as the normal distribution. 
+
+Here is an example for the feature `PC12`.
+
+```{r}
+qqnorm(data$PC12)
+qqline(data$PC12)
+```
+
+#### Data Handling 
+
+Throughout our exploratory analysis we also focused on handling outliers and missing values. 
+
+For the part of missing values, we found that there were only some in the additional data set given for the task. Below a visualization of the missing values in the data set:
+<br/>
+<br/>
+```{r}
+missmap(additional_data, col=c("red", "grey"))
+```
+
+As can be seen in the __Missingness__ __Map__ we only have 4% missing data. Therefore, we decided to impute those missing values by means of the Miss forest package. This imputation algorithm fits a random forest in order to predict the missing values. 
+
+Furthermore, we analyzed how many outliers we obtain per column. All in all, we found that there were no outliers in the dependent variable and very few in the pre processed features. On the other hand, the additional data was characterized by a high number of outliers. 
+
+__Example__ __boxplot__ __of__ __dependent__ __variables__
+<br/>
+```{r}
+boxplot(data[,c(2:5)])
+```
+<br/>
+__Example__ __boxplot__ __of__ __pre-processed__ __features__
+<br/>
+```{r}
+boxplot(data[,c(110:115)])
+```
+<br/>
+__Example__ __boxplot__ __of__ __additional__ __features__
+<br/>
+```{r}
+boxplot(data[,c(500:505)])
+```
+<br/>
+
+
+#### Seasonality 
+
+As we have data for each day and season, we also wanted to look at whether energy production is constant throughout the year or fluctuates from time to time. To do this, we looked at a sample year and a sample solar panel site and plotted the production throughout that year. This graph clearly shows that production fluctuates over time which is understandably, as there is more sun in summer than in winter. This is a very insightful information because we can use it to generate a new categorical feature indicating in which season or month the solar energy was generated. 
+<br/>
+<br/>
+```{r}
+solar_data_timeseries <- solar_data[1:400,1:99]
+solar_data_timeseries$Date <- as.Date.character(solar_data_timeseries$Date, format = c("%Y%m%d"))
+ggplot(solar_data_timeseries, aes(x = Date, y = ADAX))  + 
+  geom_line(col="black") +
+  scale_x_date(date_labels = "%b") +
+  theme_minimal() +
+  labs(title = "Time series", 
+       x = "Month", 
+       y = "Energy production") 
+```
+
+
+### The Model
+After performing all this explanatory data analysis, it was time to fit a model. In order to predict the solar product at the 98 weather stations for the dates after 31/12/2007, we chose to implement a Gradient Boosting Machine (GBM) algorithm. We chose this algorithm mainly due to its ability to use Laplace in it's distribution argument, which uses absolute loss to calculate error, and is therefore perfect since MAE is the evaluation metric of the competition. Additionally, GBM is a good choice because it trains many models in a gradual manner, meaning it is able to come up with a good solution even with little hyperparameter tuning. 
+
+The data we used for our model consisted of all the PC columns from the solar data set, as well as an additional column that was made from the date column, but only keeping the month. We added this data column in order to include the seasonality factor explained earlier in the report. We chose to add all the principle components, as we found that adding all of them lead to the smallest MAE when we scored our model on the test data we kept when training the model. We also tried adding in some of the additional variables, but found that this worsened our model. Another aspect we tried in order to attempt our model was removing any of the outliers in the training data. This however again worsened our model. It makes sense that in a case like solar product data there will be many "outliers", since the amount of sunshine per day can vary greatly. In the end, we therefore chose to keep the outliers in the data.
+
+Due to time constraints, we were only able to try a few different hyperparameter combinations, however had more time allowed, we would have definitely tried to tune these values even more. Additionally, we tried adding more trees over time (which increased our score significantly each time), however with the computational power of our computers and the time constraints the max number of trees we were able to include in the model was 1000. Had we had more time or computer power, we would have increased this number further. With the resources we had available, our best model was a GBM model with hyper parameters of 1000 trees, an interaction depth of 6 and a shrinkage of 0.05. With this model we achieved an overall MAE of 2410799.85720 when submitting our predictions in the Kaggle competition.
+
+### References
+
+Built In. 2020. A Step-By-Step Explanation Of Principal Component Analysis. [online] Available at: <https://builtin.com/data-science/step-step-explanation-principal-component-analysis> [Accessed 20 December 2020].
+
+En.wikipedia.org. 2020. Renewable Energy Industry. [online] Available at: <https://en.wikipedia.org/wiki/Renewable_energy_industry> [Accessed 23 December 2020].
+
+Medium. 2020. Gaussian Distribution: Why Is It Important In Data Science And Machine Learning?. [online] Available at: <https://medium.com/ai-techsystems/gaussian-distribution-why-is-it-important-in-data-science-and-machine-learning-9adbe0e5f8ac> [Accessed 22 December 2020].
+
+Rpubs.com. 2020. Rpubs - Missforest - Missing Data Imputation. [online] Available at: <https://rpubs.com/lmorgan95/MissForest> [Accessed 24 December 2020].
+
+Singh, H., 2020. Understanding Gradient Boosting Machines. [online] Medium. Available at: <https://towardsdatascience.com/understanding-gradient-boosting-machines-9be756fe76ab> [Accessed 25 December 2020].
