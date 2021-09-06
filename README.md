@@ -20,6 +20,6 @@ component analysis. Each observation corresponds to a day.
 VWaWiRQ_iQfR.cVY : Information on each of the stations like latitude, longitudes, and elevation ¡meters¢
 addiWiRQaO_YaUiabOeV.RDaWa :Information on numerical weather predictions ¡NWP¢ which might be relevant for
 the solar energy production.
-As mentioned, the solar data set was preprocessed by means of principal component analysis. This analysis is a
+As mentioned, the solar data set was pre processed by means of principal component analysis. This analysis is a
 dimensionality-reduction method which is ozen used when handling big data sets as the ones here. Since we do not have
 any information on the exact pre-processing steps we will not explain this further
